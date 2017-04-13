@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chess</title>
+    <link rel='stylesheet' href='/stylesheets/chess.css' />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="log"></div>
+    <script type="text/javascript">
+        $(document).ready(function(){
+            var id = <%= id%>
+            var canvas = document.getElementById('canvas');
+            var ctx = canvas.getContext("2d");
+
+            const square = 60;
+
+            $('#canvas').attr('width', square*8);
+            $('#canvas').attr('height', square*8);
+            $('#canvas').css('margin', "0 calc((100% - " + square*8 + "px) / 2 - 150px)");
+            $('#log').css('height', square*8 + 'px')
+
+            //-------------------------------------
+            function render(move) {
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(0, 0, 8 * square, 8 * square);
+                ctx.fillStyle = "#222";
+                for (var i = 1; i <= 9; i++) {
+                    for (var j = (i % 2 == 0) ? 0 : 1; j <= 9; j += 2) {
+                        ctx.fillRect((i - 1) * square, (j - 1) * square, square, square);
+                    }
+                }
+                if (move != undefined) {
+                    move.forEach(function (e) {
+                        if (e[2] == "M") {
+                            ctx.fillStyle = "#99f";
+                            ctx.fillRect(e[0] * square, e[1] * square, square, square);
+                        }
+                        else if (e[2] == "A") {
+                            ctx.fillStyle = "#f99";
+                            ctx.fillRect(e[0] * square, e[1] * square, square, square);
+                        }
+                    });
+                }
+                ctx.fillStyle = "#fafafa";
+                ctx.align = "left";
+                ctx.textBaseline = "top";
+                ctx.font = "bold 60px sans-serif";
+                ctx.lineWidth = 3;
+                for (var i = 0; i < 8; i++) {
+                    for (var j = 0; j < 8; j++) {
+                        if (field[i][j].figure.col == "white") {
+                            ctx.fillStyle = "#fff";
+                            ctx.strokeStyle = "#000"
+                        }
+                        else {
+                            ctx.fillStyle = "#000";
+                            ctx.strokeStyle = "#fff"
+                        }
+                        switch (field[i][j].figure.type) {
+                            case "rook":
+                                ctx.fillText("Л", i * square, j * square);
+                                ctx.strokeText("Л", i * square, j * square);
+                                break;
+                            case "bishop":
+                                ctx.fillText("С", i * square, j * square);
+                                ctx.strokeText("С", i * square, j * square);
+                                break;
+                            case "knight":
+                                ctx.fillText("к", i * square, j * square);
+                                ctx.strokeText("к", i * square, j * square);
+                                break;
+                            case "queen":
+                                ctx.fillText("Ф", i * square, j * square);
+                                ctx.strokeText("Ф", i * square, j * square);
+                                break;
+                            case "king":
+                                ctx.fillText("К", i * square, j * square);
+                                ctx.strokeText("К", i * square, j * square);
+                                break;
+                            case "pawn":
+                                ctx.fillText("п", i * square, j * square);
+                                ctx.strokeText("п", i * square, j * square);
+                                break;
+                        }
+                    }
+                }
+            }
+
+            function log(message){
+                $('#log').append(message + "<hr />");
+            }
+            //-------------------------------------
+            function figure(x, y, col){
+                this.x = x;
+                this.y = y;
+                this.col = col;
+            }
+            figure.prototype.possibleToMove = function(x,y){
+                var move = this.move();
+                for(var i = 0; i < move.length; i++){
+                    if(move[i][0] == x && move[i][1] == y){
+                        if(move[i][2] == "A"){
+                            return "A";
+                        }
+                        else{
+                            return "M";
+                        }
+                    }
+                }
+                return 0;
+            }
+            //---------------Ладья------------------
+            function rook(x, y, col){
+                this.type = "rook";
+                figure.apply(this, arguments);
+            }
+
+            rook.prototype = Object.create(figure.prototype);
+            rook.prototype.move = function(){
+                var result = new Array();
+                var i = this.x + 1;
+                while((i<8)&&(field[i][this.y].figure == 0)){
+                    result[result.length] = new Array(i, this.y, "M");
+                    i++;
+                }
+                if((i<8)&&(field[i][this.y].figure.col != this.col)){
+                    result[result.length] = new Array(i, this.y, "A");
+                }
+                i = this.x - 1;
+                while((i>-1)&&(field[i][this.y].figure == 0)){
+                    result[result.length] = new Array(i, this.y, "M");
+                    i--;
+                }
+                if((i>-1)&&(field[i][this.y].figure.col != this.col)){
+                    result[result.length] = new Array(i, this.y, "A");
+                }
+                i = this.y + 1;
+                while((i<8)&&(field[this.x][i].figure == 0)){
+                    result[result.length] = new Array(this.x, i, "M");
+                    i++;
+                }
+                if((i<8)&&(field[this.x][i].figure.col != this.col)){
+                    result[result.length] = new Array(this.x, i, "A");
+                }
+                i = this.y - 1;
+                while((i>-1)&&(field[this.x][i].figure == 0)){
+                    result[result.length] = new Array(this.x, i, "M");
+                    i--;
+                }
+                if((i>-1)&&(field[this.x][i].figure.col != this.col)){
+                    result[result.length] = new Array(this.x, i, "A");
+                }
+                // use resul.splice(i,1)
+                var x = this.x;
+                var y = this.y;
+                var color = this.col;
+                var l = result.length;
+                var spliced = 0;
+                for (var k = 0; k < l; k++) {
+                    var f = new Array();
+                    for(var i = 0; i < 8; i++){
+                        f[i] = new Array();
+                        for(var j = 0; j < 8; j++){
+                            f[i][j] = new cell(field[i][j].figure);
+                        }
+                    }
+                    f[result[k - spliced][0]][result[k - spliced][1]].figure = f[x][y].figure;
+                    f[x][y].figure = 0;
+                    if(color == "white"){
+                        if(f[wKing.x][wKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                    else{
+                        if(f[bKing.x][bKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                }
+                return result;
+            }
+            //----------------Слон--------------------
+            function bishop(x, y, col){
+                this.type = "bishop";
+                figure.apply(this, arguments);
+            }
+
+            bishop.prototype = Object.create(figure.prototype);
+            bishop.prototype.move = function() {
+                var result = new Array();
+                var i = 1;
+                while ((this.x + i < 8) && (this.y + i < 8) && (field[this.x + i][this.y + i].figure == 0)) {
+                    result[result.length] = new Array(this.x + i, this.y + i, "M");
+                    i++;
+                }
+                if ((this.x + i < 8) && (this.y + i < 8) && (field[this.x + i][this.y + i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x + i, this.y + i, "A");
+                }
+                i = 1;
+                while ((this.x + i < 8) && (this.y - i > -1) && (field[this.x + i][this.y - i].figure == 0)) {
+                    result[result.length] = new Array(this.x + i, this.y - i, "M");
+                    i++;
+                }
+                if ((this.x + i < 8) && (this.y - i > -1) && (field[this.x + i][this.y - i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x + i, this.y - i, "A");
+                }
+                i = 1;
+                while ((this.x - i > -1) && (this.y - i > -1) && (field[this.x - i][this.y - i].figure == 0)) {
+                    result[result.length] = new Array(this.x - i, this.y - i, "M");
+                    i++;
+                }
+                if ((this.x - i > -1) && (this.y - i > -1) && (field[this.x - i][this.y - i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x - i, this.y - i, "A");
+                }
+                i = 1;
+                while ((this.x - i > -1) && (this.y + i < 8) && (field[this.x - i][this.y + i].figure == 0)) {
+                    result[result.length] = new Array(this.x - i, this.y + i, "M");
+                    i++;
+                }
+                if ((this.x - i > -1) && (this.y + i < 8) && (field[this.x - i][this.y + i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x - i, this.y + i, "A");
+                }
+                var x = this.x;
+                var y = this.y;
+                var color = this.col;
+                var l = result.length;
+                var spliced = 0;
+                for (var k = 0; k < l; k++) {
+                    var f = new Array();
+                    for(var i = 0; i < 8; i++){
+                        f[i] = new Array();
+                        for(var j = 0; j < 8; j++){
+                            f[i][j] = new cell(field[i][j].figure);
+                        }
+                    }
+                    f[result[k - spliced][0]][result[k - spliced][1]].figure = f[x][y].figure;
+                    f[x][y].figure = 0;
+                    if(color == "white"){
+                        if(f[wKing.x][wKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                    else{
+                        if(f[bKing.x][bKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                }
+                return result;
+            }
+            //---------------Конь---------------------
+            function knight(x, y, col){
+                this.type = "knight";
+                figure.apply(this, arguments);
+            }
+
+            knight.prototype = Object.create(figure.prototype);
+            knight.prototype.move = function(){
+                var color = this.col;
+                var result = new Array();
+                function setResult(x, y){
+                    if(field[x][y].figure == 0){
+                        result[result.length] = new Array(x, y, "M");
+                    }
+                    else if(field[x][y].figure.col != color){
+                        result[result.length] = new Array(x, y, "A");
+                    }
+                }
+                var x = this.x - 2;
+                var y = this.y - 1;
+                if((x > -1) && (y > -1)){
+                    setResult(x, y);
+                }
+                x = this.x - 1;
+                y = this.y - 2;
+                if((x > -1) && (y > -1)){
+                    setResult(x, y);
+                }
+                x = this.x + 1;
+                y = this.y - 2;
+                if((x < 8) && (y > -1)){
+                    setResult(x, y);
+                }
+                x = this.x + 2;
+                y = this.y - 1;
+                if((x < 8) && (y > -1)){
+                    setResult(x, y);
+                }
+                x = this.x - 1;
+                y = this.y + 2;
+                if((x > -1) && (y < 8)){
+                    setResult(x, y);
+                }
+                x = this.x - 2;
+                y = this.y + 1;
+                if((x > -1) && (y < 8)){
+                    setResult(x, y);
+                }
+                x = this.x + 2;
+                y = this.y + 1;
+                if((x < 8) && (y < 8)){
+                    setResult(x, y);
+                }
+                x = this.x + 1;
+                y = this.y + 2;
+                if((x < 8) && (y < 8)){
+                    setResult(x, y);
+                }
+                var x = this.x;
+                var y = this.y;
+                var color = this.col;
+                var l = result.length;
+                var spliced = 0;
+                for (var k = 0; k < l; k++) {
+                    var f = new Array();
+                    for(var i = 0; i < 8; i++){
+                        f[i] = new Array();
+                        for(var j = 0; j < 8; j++){
+                            f[i][j] = new cell(field[i][j].figure);
+                        }
+                    }
+                    f[result[k - spliced][0]][result[k - spliced][1]].figure = f[x][y].figure;
+                    f[x][y].figure = 0;
+                    if(color == "white"){
+                        if(f[wKing.x][wKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                    else{
+                        if(f[bKing.x][bKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                }var x = this.x;
+                var y = this.y;
+                var color = this.col;
+                var l = result.length;
+                var spliced = 0;
+                for (var k = 0; k < l; k++) {
+                    var f = new Array();
+                    for(var i = 0; i < 8; i++){
+                        f[i] = new Array();
+                        for(var j = 0; j < 8; j++){
+                            f[i][j] = new cell(field[i][j].figure);
+                        }
+                    }
+                    f[result[k - spliced][0]][result[k - spliced][1]].figure = f[x][y].figure;
+                    f[x][y].figure = 0;
+                    if(color == "white"){
+                        if(f[wKing.x][wKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                    else{
+                        if(f[bKing.x][bKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                }
+                return result;
+            }
+            //--------------Ферзь---------------------
+            function queen(x, y, col){
+                this.type = "queen";
+                figure.apply(this, arguments);
+            }
+
+            queen.prototype = Object.create(figure.prototype);
+            queen.prototype.move = function(){
+                var result = new Array();
+                var i = this.x + 1;
+                while((i<8)&&(field[i][this.y].figure == 0)){
+                    result[result.length] = new Array(i, this.y, "M");
+                    i++;
+                }
+                if((i<8)&&(field[i][this.y].figure.col != this.col)){
+                    result[result.length] = new Array(i, this.y, "A");
+                }
+                i = this.x - 1;
+                while((i>-1)&&(field[i][this.y].figure == 0)){
+                    result[result.length] = new Array(i, this.y, "M");
+                    i--;
+                }
+                if((i>-1)&&(field[i][this.y].figure.col != this.col)){
+                    result[result.length] = new Array(i, this.y, "A");
+                }
+                i = this.y + 1;
+                while((i<8)&&(field[this.x][i].figure == 0)){
+                    result[result.length] = new Array(this.x, i, "M");
+                    i++;
+                }
+                if((i<8)&&(field[this.x][i].figure.col != this.col)){
+                    result[result.length] = new Array(this.x, i, "A");
+                }
+                i = this.y - 1;
+                while((i>-1)&&(field[this.x][i].figure == 0)){
+                    result[result.length] = new Array(this.x, i, "M");
+                    i--;
+                }
+                if((i>-1)&&(field[this.x][i].figure.col != this.col)){
+                    result[result.length] = new Array(this.x, i, "A");
+                }
+                i = 1;
+                while ((this.x + i < 8) && (this.y + i < 8) && (field[this.x + i][this.y + i].figure == 0)) {
+                    result[result.length] = new Array(this.x + i, this.y + i, "M");
+                    i++;
+                }
+                if ((this.x + i < 8) && (this.y + i < 8) && (field[this.x + i][this.y + i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x + i, this.y + i, "A");
+                }
+                i = 1;
+                while ((this.x + i < 8) && (this.y - i > -1) && (field[this.x + i][this.y - i].figure == 0)) {
+                    result[result.length] = new Array(this.x + i, this.y - i, "M");
+                    i++;
+                }
+                if ((this.x + i < 8) && (this.y - i > -1) && (field[this.x + i][this.y - i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x + i, this.y - i, "A");
+                }
+                i = 1;
+                while ((this.x - i > -1) && (this.y - i > -1) && (field[this.x - i][this.y - i].figure == 0)) {
+                    result[result.length] = new Array(this.x - i, this.y - i, "M");
+                    i++;
+                }
+                if ((this.x - i > -1) && (this.y - i > -1) && (field[this.x - i][this.y - i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x - i, this.y - i, "A");
+                }
+                i = 1;
+                while ((this.x - i > -1) && (this.y + i < 8) && (field[this.x - i][this.y + i].figure == 0)) {
+                    result[result.length] = new Array(this.x - i, this.y + i, "M");
+                    i++;
+                }
+                if ((this.x - i > -1) && (this.y + i < 8) && (field[this.x - i][this.y + i].figure.col != this.col)) {
+                    result[result.length] = new Array(this.x - i, this.y + i, "A");
+                }
+                var x = this.x;
+                var y = this.y;
+                var color = this.col;
+                var l = result.length;
+                var spliced = 0;
+                for (var k = 0; k < l; k++) {
+                    var f = new Array();
+                    for(var i = 0; i < 8; i++){
+                        f[i] = new Array();
+                        for(var j = 0; j < 8; j++){
+                            f[i][j] = new cell(field[i][j].figure);
+                        }
+                    }
+                    f[result[k - spliced][0]][result[k - spliced][1]].figure = f[x][y].figure;
+                    f[x][y].figure = 0;
+                    if(color == "white"){
+                        if(f[wKing.x][wKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                    else{
+                        if(f[bKing.x][bKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                }
+                return result;
+            }
+            //--------------Пешка---------------------
+            function pawn(x, y, col){
+                this.type = "pawn";
+                this.first = true;
+                figure.apply(this, arguments);
+            }
+
+            pawn.prototype = Object.create(figure.prototype);
+            pawn.prototype.move = function(){
+                var result = new Array();
+                if (this.col == "white") {
+                    if (this.y - 1 > -1) {
+                        if (field[this.x][this.y - 1].figure == 0) {
+                            result[result.length] = new Array(this.x, this.y - 1, "M");
+                            if (this.y - 2 > -1 && this.first && field[this.x][this.y - 2].figure == 0) {
+                                result[result.length] = new Array(this.x, this.y - 2, "M");
+                            }
+                        }
+                        if (this.x - 1 > -1 && field[this.x - 1][this.y - 1].figure != 0
+                                && field[this.x - 1][this.y - 1].figure.col != this.col) {
+                            result[result.length] = new Array(this.x - 1, this.y - 1, "A");
+                        }
+                        if (this.x + 1 < 8 && field[this.x + 1][this.y - 1].figure != 0
+                                && field[this.x + 1][this.y - 1].figure.col != this.col) {
+                            result[result.length] = new Array(this.x + 1, this.y - 1, "A");
+                        }
+                    }
+                }
+                else{
+                    if (this.y + 1 < 8) {
+                        if (field[this.x][this.y + 1].figure == 0) {
+                            result[result.length] = new Array(this.x, this.y + 1, "M");
+                            if (this.y + 2 < 8 && this.first && field[this.x][this.y + 2].figure == 0) {
+                                result[result.length] = new Array(this.x, this.y + 2, "M");
+                            }
+                        }
+                        if (this.x - 1 > -1 && field[this.x - 1][this.y + 1].figure != 0
+                                && field[this.x - 1][this.y + 1].figure.col != this.col) {
+                            result[result.length] = new Array(this.x - 1, this.y + 1, "A");
+                        }
+                        if (this.x + 1 < 8 && field[this.x + 1][this.y + 1].figure != 0
+                                && field[this.x + 1][this.y + 1].figure.col != this.col) {
+                            result[result.length] = new Array(this.x + 1, this.y + 1, "A");
+                        }
+                    }
+                }
+                var x = this.x;
+                var y = this.y;
+                var color = this.col;
+                var l = result.length;
+                var spliced = 0;
+                for (var k = 0; k < l; k++) {
+                    var f = new Array();
+                    for(var i = 0; i < 8; i++){
+                        f[i] = new Array();
+                        for(var j = 0; j < 8; j++){
+                            f[i][j] = new cell(field[i][j].figure);
+                        }
+                    }
+                    f[result[k - spliced][0]][result[k - spliced][1]].figure = f[x][y].figure;
+                    f[x][y].figure = 0;
+                    if(color == "white"){
+                        if(f[wKing.x][wKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                    else{
+                        if(f[bKing.x][bKing.y].figure.checked(f)){
+                            result.splice(k - spliced, 1);
+                            spliced++;
+                        }
+                    }
+                }
+                return result;
+            }
+            //-------------Король---------------------
+            function king(x, y, col){
+                this.type = "king";
+                figure.apply(this, arguments);
+            }
+
+            king.prototype = Object.create(figure.prototype);
+            king.prototype.checked = function(field, x, y){
+                if(x == undefined || y == undefined){
+                    return this.checked(field, this.x, this.y)
+                }
+                var result = false;
+                var i = x + 1;
+                while((i<8)&&(field[i][y].figure == 0)){
+                    i++;
+                }
+                if((i<8)&&(field[i][y].figure.col != this.col)
+                        &&(field[i][y].figure.type == "rook" || field[i][y].figure.type == "queen")){
+                    result = true;
+                }
+                i = x - 1;
+                while((i>-1)&&(field[i][y].figure == 0)){
+                    i--;
+                }
+                if((i>-1)&&(field[i][y].figure.col != this.col)
+                        &&(field[i][y].figure.type == "rook" || field[i][y].figure.type == "queen")){
+                    result = true;
+                }
+                i = y + 1;
+                while((i<8)&&(field[x][i].figure == 0)){
+                    i++;
+                }
+                if((i<8)&&(field[x][i].figure.col != this.col)
+                        &&(field[x][i].figure.type == "rook" || field[x][i].figure.type == "queen")){
+                    result = true;
+                }
+                i = y - 1;
+                while((i>-1)&&(field[x][i].figure == 0)){
+                    i--;
+                }
+                if((i>-1)&&(field[x][i].figure.col != this.col)
+                        &&(field[x][i].figure.type == "rook" || field[x][i].figure.type == "queen")){
+                    result = true;
+                }
+                //========================================================
+                i = 1;
+                while ((x + i < 8) && (y + i < 8) && (field[x + i][y + i].figure == 0)) {
+                    i++;
+                }
+                if ((x + i < 8) && (y + i < 8) && (field[x + i][y + i].figure.col != this.col)
+                    &&(field[x + i][y + i].figure.type == "bishop"
+                        || field[x + i][y + i].figure.type == "queen")) {
+                    result = true;
+                }
+                i = 1;
+                while ((x + i < 8) && (y - i > -1) && (field[x + i][y - i].figure == 0)) {
+                    i++;
+                }
+                if ((x + i < 8) && (y - i > -1) && (field[x + i][y - i].figure.col != this.col)
+                        &&(field[x + i][y - i].figure.type == "bishop"
+                        || field[x + i][y - i].figure.type == "queen")) {
+                    result = true;                }
+                i = 1;
+                while ((x - i > -1) && (y - i > -1) && (field[x - i][y - i].figure == 0)) {
+                    i++;
+                }
+                if ((x - i > -1) && (y - i > -1) && (field[x - i][y - i].figure.col != this.col)
+                        &&(field[x - i][y - i].figure.type == "bishop"
+                        || field[x - i][y - i].figure.type == "queen")) {
+                    result = true;
+                }
+                i = 1;
+                while ((x - i > -1) && (y + i < 8) && (field[x - i][y + i].figure == 0)) {
+                    i++;
+                }
+                if ((x - i > -1) && (y + i < 8) && (field[x - i][y + i].figure.col != this.col)
+                        &&(field[x - i][y + i].figure.type == "bishop"
+                        || field[x - i][y + i].figure.type == "queen")) {
+                    result = true;
+                }
+                //==========================================================
+                var color = this.col;
+                function setResult(sx, sy){
+                    if(field[sx][sy].figure != 0 && field[sx][sy].figure.col != color && field[sx][sy].figure.type == "knight"){
+                        result = true;
+                    }
+                }
+                var rx = x - 2;
+                var ry = y - 1;
+                if((rx > -1) && (ry > -1)){
+                    setResult(rx, ry);
+                }
+                rx = x - 1;
+                ry = y - 2;
+                if((rx > -1) && (ry > -1)){
+                    setResult(rx, ry);
+                }
+                rx = x + 1;
+                ry = y - 2;
+                if((rx < 8) && (ry > -1)){
+                    setResult(rx, ry);
+                }
+                rx = x + 2;
+                ry = y - 1;
+                if((rx < 8) && (ry > -1)){
+                    setResult(rx, ry);
+                }
+                rx = x - 1;
+                ry = y + 2;
+                if((rx > -1) && (ry < 8)){
+                    setResult(rx, ry);
+                }
+                rx = x - 2;
+                ry = y + 1;
+                if((rx > -1) && (ry < 8)){
+                    setResult(rx, ry);
+                }
+                rx = x + 2;
+                ry = y + 1;
+                if((rx < 8) && (ry < 8)){
+                    setResult(x, y);
+                }
+                rx = x + 1;
+                ry = y + 2;
+                if((rx < 8) && (ry < 8)){
+                    setResult(rx, ry);
+                }
+                //==================================
+                if(this.col == "white" && y - 1 > -1
+                        && (x - 1 > -1 && field[x - 1][y - 1].figure != 0
+                        && field[x - 1][y - 1].figure.col != this.col
+                        && field[x - 1][y - 1].figure.type == "pawn"
+                        || x + 1 < 8 && field[x + 1][y - 1].figure != 0
+                        && field[x + 1][y - 1].figure.type == "pawn"
+                        && field[x + 1][y - 1].figure.col != this.col )){
+                    result = true;
+                }
+                if(this.col == "black" && y + 1 < 8
+                        && (x - 1 > -1 && field[x - 1][y + 1].figure != 0
+                        && field[x - 1][y + 1].figure.col != this.col
+                        && field[x - 1][y + 1].figure.type == "pawn"
+                        || x + 1 < 8 && field[x + 1][y + 1].figure != 0
+                        && field[x + 1][y + 1].figure.col != this.col
+                        && field[x + 1][y + 1].figure.type == "pawn")){
+                    result = true;
+                }
+                //=====================================
+                if(x - 1 > -1 && y - 1 > -1 && field[x - 1][y - 1].figure.type == "king"
+                        && field[x - 1][y - 1].figure.col != this.col){
+                    result = true;
+                }
+                if(x + 1 < 8 && y - 1 > -1 && field[x + 1][y - 1].figure.type == "king"
+                        && field[x + 1][y - 1].figure.col != this.col){
+                    result = true;
+                }
+                if(x - 1 > -1 && y + 1 < 8 && field[x - 1][y + 1].figure.type == "king"
+                        && field[x - 1][y + 1].figure.col != this.col){
+                    result = true;
+                }
+                if(x + 1 < 8 && y + 1 < 8 && field[x + 1][y + 1].figure.type == "king"
+                        && field[x + 1][y + 1].figure.col != this.col){
+                    result = true;
+                }
+                if(y - 1 > -1 && field[x][y - 1].figure.type == "king"
+                        && field[x][y - 1].figure.col != this.col){
+                    result = true;
+                }
+                if(y + 1 < 8 && field[x][y + 1].figure.type == "king"
+                        && field[x][y + 1].figure.col != this.col){
+                    result = true;
+                }
+                if(x - 1 > -1 && field[x - 1][y].figure.type == "king"
+                        && field[x - 1][y].figure.col != this.col){
+                    result = true;
+                }
+                if(x + 1 < 8 && field[x + 1][y].figure.type == "king"
+                        && field[x + 1][y].figure.col != this.col){
+                    result = true;
+                }
+                return result;
+            }
+            king.prototype.move = function(){
+                var result = new Array();
+                if(this.x + 1 < 8 && this.y + 1 < 8 && !this.checked(field, this.x + 1, this.y + 1)){
+                    if(field[this.x + 1][this.y + 1].figure == 0) {
+                        result[result.length] = new Array(this.x + 1, this.y + 1, "M");
+                    }
+                    else if(field[this.x + 1][this.y + 1].figure.col != this.col){
+                        result[result.length] = new Array(this.x + 1, this.y + 1, "A");
+                    }
+                }
+                if(this.x - 1 > -1 && this.y + 1 < 8 && !this.checked(field, this.x - 1, this.y + 1)){
+                    if(field[this.x - 1][this.y + 1].figure == 0) {
+                        result[result.length] = new Array(this.x - 1, this.y + 1, "M");
+                    }
+                    else if(field[this.x -1][this.y + 1].figure.col != this.col){
+                        result[result.length] = new Array(this.x - 1, this.y + 1, "A");
+                    }
+                }
+                if(this.x + 1 < 8 && this.y - 1 > -1 && !this.checked(field, this.x + 1, this.y - 1)){
+                    if(field[this.x + 1][this.y - 1].figure == 0) {
+                        result[result.length] = new Array(this.x + 1, this.y - 1, "M");
+                    }
+                    else if(field[this.x + 1][this.y - 1].figure.col != this.col){
+                        result[result.length] = new Array(this.x + 1, this.y - 1, "A");
+                    }
+                }
+                if(this.x - 1 > -1 && this.y - 1 > -1 && !this.checked(field, this.x - 1, this.y - 1)){
+                    if(field[this.x - 1][this.y - 1].figure == 0) {
+                        result[result.length] = new Array(this.x - 1, this.y - 1, "M");
+                    }
+                    else if(field[this.x - 1][this.y - 1].figure.col != this.col){
+                        result[result.length] = new Array(this.x - 1, this.y - 1, "A");
+                    }
+                }
+                if(this.y - 1 > -1 && !this.checked(field, this.x, this.y - 1)){
+                    if(field[this.x][this.y - 1].figure == 0) {
+                        result[result.length] = new Array(this.x, this.y - 1, "M");
+                    }
+                    else if(field[this.x][this.y - 1].figure.col != this.col){
+                        result[result.length] = new Array(this.x, this.y - 1, "A");
+                    }
+                }
+                if(this.y + 1 < 8 && !this.checked(field, this.x, this.y + 1)){
+                    if(field[this.x][this.y + 1].figure == 0) {
+                        result[result.length] = new Array(this.x, this.y + 1, "M");
+                    }
+                    else if(field[this.x][this.y + 1].figure.col != this.col){
+                        result[result.length] = new Array(this.x, this.y + 1, "A");
+                    }
+                }
+                if(this.x - 1 > -1 && !this.checked(field, this.x - 1, this.y)){
+                    if(field[this.x - 1][this.y].figure == 0) {
+                        result[result.length] = new Array(this.x - 1, this.y, "M");
+                    }
+                    else if(field[this.x - 1][this.y].figure.col != this.col){
+                        result[result.length] = new Array(this.x - 1, this.y, "A");
+                    }
+                }
+                if(this.x + 1 < 8 && !this.checked(field, this.x + 1, this.y)){
+                    if(field[this.x + 1][this.y].figure == 0) {
+                        result[result.length] = new Array(this.x + 1, this.y, "M");
+                    }
+                    else if(field[this.x + 1][this.y].figure.col != this.col){
+                        result[result.length] = new Array(this.x + 1, this.y, "A");
+                    }
+                }
+                return result;
+            }
+            //----------------------------------------
+            function cell(figure){
+                this.figure = figure;
+            }
+
+            var field = new Array();
+            for(var i = 0; i < 8; i++){
+                field[i] = new Array();
+                for(var j = 0; j < 8; j++){
+                    field[i][j] = new cell(0);
+                }
+            }
+
+            function KingStatus(x,y){
+                this.x = x;
+                this.y = y;
+            }
+
+            var wKing = new KingStatus(3, 7);
+            var bKing = new KingStatus(4, 0);
+
+            field[0][0].figure = new rook(0, 0, "black");
+            field[1][0].figure = new knight(1, 0, "black");
+            field[2][0].figure = new bishop(2, 0, "black");
+            field[4][0].figure = new king(4, 0, "black");
+            field[3][0].figure = new queen(3, 0, "black");
+            field[5][0].figure = new bishop(5, 0, "black");
+            field[6][0].figure = new knight(6, 0, "black");
+            field[7][0].figure = new rook(7, 0, "black");
+
+            for(var i = 0; i < 8; i++){
+                field[i][1].figure = new pawn(i, 1, "black");
+                field[i][6].figure = new pawn(i, 6, "white");
+            }
+
+            field[0][7].figure = new rook(0, 7, "white");
+            field[1][7].figure = new knight(1, 7, "white");
+            field[2][7].figure = new bishop(2, 7, "white");
+            field[3][7].figure = new king(3, 7, "white");
+            field[4][7].figure = new queen(4, 7, "white");
+            field[5][7].figure = new bishop(5, 7, "white");
+            field[6][7].figure = new knight(6, 7, "white");
+            field[7][7].figure = new rook(7, 7, "white");
+
+            //-----------------------------------------
+            render();
+            var status = -1;
+            var color;
+            var fx = -1;
+            var fy = -1;
+            $('#canvas').click(function(e){
+                var x = Math.floor((e.pageX - this.offsetLeft) / square);
+                var y = Math.floor((e.pageY - this.offsetTop) / square);
+                switch(status){
+                    case 0:
+                        if(field[x][y].figure != 0 && field[x][y].figure.col == color){
+                            var move = field[x][y].figure.move();
+                            render(move);
+                            if(move.length > 0) {
+                                status = 1;
+                                fx = x;
+                                fy = y;
+                            }
+                        }
+                        break;
+                    case 1:
+                        if(field[fx][fy].figure.possibleToMove(x,y) == "M" && field[fx][fy].figure.col == color){
+                            field[x][y].figure = field[fx][fy].figure;
+                            field[fx][fy].figure = 0;
+                            field[x][y].figure.x = x;
+                            field[x][y].figure.y = y;
+                            if(field[x][y].figure.type == "pawn"){
+                                field[x][y].figure.first = false;
+                            }
+                            else if(field[x][y].figure.type == "king"){
+                                if(field[x][y].figure.col == "white"){
+                                    wKing.x = x;
+                                    wKing.y = y;
+                                }
+                                else{
+                                    bKing.x = x;
+                                    bKing.y = y;
+                                }
+                            }
+                            var b = 0;
+                            var w = 0;
+                            for(var i = 0; i < 8; i++){
+                                for(var j = 0; j < 8; j++){
+                                    if(field[i][j].figure != 0 && field[i][j].figure.move().length > 0) {
+                                        if (field[i][j].figure.col == "white") {
+                                            w++;
+                                        }
+                                        else{
+                                            b++;
+                                        }
+                                    }
+                                }
+                            }
+                            if(w == 0){
+                                log("Белым поставлен мат")
+                            }
+                            if(b == 0){
+                                log("Черным поставлен мат");
+                            }
+                            render();
+                            socket.emit('xod', {id:id, xFrom:fx, yFrom:fy, xTo:x, yTo:y});
+                            status = 2;
+                            log('Ждите вашего хода');
+                        }
+                        else if(field[fx][fy].figure.possibleToMove(x,y) == "A" && field[fx][fy].figure.col == color){
+                            field[x][y].figure = field[fx][fy].figure;
+                            field[fx][fy].figure = 0;
+                            field[x][y].figure.x = x;
+                            field[x][y].figure.y = y;
+                            if(field[x][y].figure.type == "pawn"){
+                                field[x][y].figure.first = false;
+                            }
+                            else if(field[x][y].figure.type == "king"){
+                                if(field[x][y].figure.col == "white"){
+                                    wKing.x = x;
+                                    wKing.y = y;
+                                }
+                                else{
+                                    bKing.x = x;
+                                    bKing.y = y;
+                                }
+                            }
+                            var b = 0;
+                            var w = 0;
+                            for(var i = 0; i < 8; i++){
+                                for(var j = 0; j < 8; j++){
+                                    if(field[i][j].figure != 0 && field[i][j].figure.move().length > 0) {
+                                        if (field[i][j].figure.col == "white") {
+                                            w++;
+                                        }
+                                        else{
+                                            b++;
+                                        }
+                                    }
+                                }
+                            }
+                            if(w == 0){
+                                log("Белым поставлен мат")
+                            }
+                            if(b == 0){
+                                log("Черным поставлен мат");
+                            }
+                            render();
+                            socket.emit('xod', {id:id, xFrom:fx, yFrom:fy, xTo:x, yTo:y});
+                            status = 2;
+                            log('Ждите вашего хода');
+                        }
+                        else {
+                            render();
+                            status = 0;
+                        }
+                        break;
+                }
+            });
+            //-----------------------------------------
+            var socket = io.connect('http://valentiay.tk:8080');
+            if(id == -1){
+                color = "white";
+            }
+            else{
+                color = "black";
+            }
+            socket.emit('setId', {id:id});
+            socket.on('giveId', function(data){
+                id = data.id;
+            });
+            socket.on('сerror', function(data){
+                log("<span style = 'color:#f99'>" + data.msg + "</span>");
+            });
+            socket.on('log', function(data){
+                log(data.msg);
+            });
+            socket.on('setStatus', function(data){
+                if(data.status == 0){
+                    log('Ваш ход');
+                }
+                if(data.status == 2){
+                    log('Ждите вашего хода');
+                }
+                status = data.status;
+            });
+            socket.on('giveField', function(data){
+                field[data.xTo][data.yTo].figure = field[data.xFrom][data.yFrom].figure;
+                field[data.xTo][data.yTo].figure.x = data.xTo;
+                field[data.xTo][data.yTo].figure.y = data.yTo;
+                field[data.xFrom][data.yFrom].figure = 0;
+                var b = 0;
+                var w = 0;
+                for(var i = 0; i < 8; i++){
+                    for(var j = 0; j < 8; j++){
+                        if(field[i][j].figure != 0 && field[i][j].figure.move().length > 0) {
+                            if (field[i][j].figure.col == "white") {
+                                w++;
+                            }
+                            else{
+                                b++;
+                            }
+                        }
+                    }
+                }
+                if(w == 0){
+                    log("Белым поставлен мат")
+                }
+                if(b == 0){
+                    log("Черным поставлен мат");
+                }
+                render();
+            });
+            socket.on('setColor', function(data) {
+                color = data.color
+            });
+        });
+    </script>
+</body>
+</html>

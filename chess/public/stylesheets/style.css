@@ -1,0 +1,16 @@
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: #00B7FF;
+}
+#spin{
+  float: left;
+  border: 30px solid #fff;
+  border-bottom: 30px solid #a0a0a0;
+  border-radius: 30px;
+  height: 0;
+  width:0;
+}
